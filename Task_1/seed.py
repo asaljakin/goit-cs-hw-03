@@ -1,56 +1,26 @@
-import sqlite3
-from faker import Faker
-import random
+import logging
 
-# Підключення до бази даних SQLite
-conn = sqlite3.connect('your_database.db')
-cursor = conn.cursor()
+from db_connect import connect
+from insert_status import insert_status
+from insert_tasks import insert_tasks
+from insert_users import insert_users
 
-# Створення таблиць
-cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY,
-                    fullname TEXT,
-                    email TEXT UNIQUE
-                 )''')
+def seed():
+    logging.basicConfig(level=logging.INFO)
 
-cursor.execute('''CREATE TABLE IF NOT EXISTS status (
-                    id INTEGER PRIMARY KEY,
-                    name TEXT UNIQUE
-                 )''')
+    status_names = ['new', 'in progress', 'completed']
 
-cursor.execute('''CREATE TABLE IF NOT EXISTS tasks (
-                    id INTEGER PRIMARY KEY,
-                    title TEXT,
-                    description TEXT,
-                    status_id INTEGER,
-                    user_id INTEGER,
-                    FOREIGN KEY (status_id) REFERENCES status (id),
-                    FOREIGN KEY (user_id) REFERENCES users (id)
-                 )''')
+    insert_users_stmt = """
+    INSERT INTO users (fullname, email) VALUES (%s, %s) ON CONFLICT (email) DO NOTHING;
+    """
+    insert_tasks_stmt = """
+    INSERT INTO tasks (title, description, status_id, user_id) VALUES (%s, %s, %s, %s);
+    """
 
-# Заповнення таблиць випадковими значеннями за допомогою Faker
-fake = Faker()
-
-# Заповнення таблиці users
-for _ in range(10):
-    name = fake.name()
-    email = fake.email()
-    cursor.execute("INSERT INTO users (name, email) VALUES (?, ?)", (name, email))
-
-# Заповнення таблиці status
-statuses = ['new', 'in progress', 'completed']
-for status in statuses:
-    cursor.execute("INSERT INTO status (name) VALUES (?)", (status,))
-
-# Заповнення таблиці tasks
-for _ in range(20):
-    title = fake.sentence()
-    description = fake.text()
-    status_id = random.randint(1, len(statuses))
-    user_id = random.randint(1, 10)
-    cursor.execute("INSERT INTO tasks (title, description, status_id, user_id) VALUES (?, ?, ?, ?)",
-                   (title, description, status_id, user_id))
-
-# Збереження змін та закриття з'єднання
-conn.commit()
-conn.close()
+    try:
+        with connect() as conn:
+            insert_status(conn, status_names)
+            insert_users(conn, insert_users_stmt)
+            insert_tasks(conn, insert_tasks_stmt)
+    except RuntimeError as e:
+        logging.error(e)
